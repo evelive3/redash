@@ -2,7 +2,9 @@ import { sortBy } from 'underscore';
 import template from './dynamic-table.html';
 import './dynamic-table.css';
 
-function DynamicTable() {
+function DynamicTable($sanitize) {
+  'ngInject';
+
   this.itemsPerPage = this.count = 15;
   this.page = 1;
   this.rowsCount = 0;
@@ -13,13 +15,19 @@ function DynamicTable() {
     const first = this.count * (this.page - 1);
     const last = this.count * (this.page);
 
-    this.rows = this.allRows.slice(first, last);
+    this.rowsToDisplay = this.rows.slice(first, last);
   };
 
   this.$onChanges = (changes) => {
-    this.columns = changes.columns.currentValue;
-    this.allRows = changes.rows.currentValue;
-    this.rowsCount = this.allRows.length;
+    if (changes.columns) {
+      this.columns = changes.columns.currentValue;
+    }
+
+    if (changes.rows) {
+      this.rows = changes.rows.currentValue;
+    }
+
+    this.rowsCount = this.rows.length;
 
     this.pageChanged();
   };
@@ -33,13 +41,15 @@ function DynamicTable() {
     }
 
     if (this.orderByField) {
-      this.allRows = sortBy(this.allRows, this.orderByField);
+      this.rows = sortBy(this.rows, this.orderByField.name);
       if (this.orderByReverse) {
-        this.allRows = this.allRows.reverse();
+        this.rows = this.rows.reverse();
       }
       this.pageChanged();
     }
   };
+
+  this.sanitize = value => $sanitize(value);
 
   this.sortIcon = (column) => {
     if (column !== this.orderByField) {

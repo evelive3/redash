@@ -4,10 +4,14 @@ import Plotly from 'plotly.js/lib/core';
 import bar from 'plotly.js/lib/bar';
 import pie from 'plotly.js/lib/pie';
 import histogram from 'plotly.js/lib/histogram';
+import box from 'plotly.js/lib/box';
 
 import moment from 'moment';
 
-Plotly.register([bar, pie, histogram]);
+Plotly.register([bar, pie, histogram, box]);
+Plotly.setPlotConfig({
+  modeBarButtonsToRemove: ['sendDataToCloud'],
+});
 
 // The following colors will be used if you pick "Automatic" color.
 const BaseColors = {
@@ -137,7 +141,7 @@ function percentBarStacking(seriesList) {
       sum += seriesList[j].y[i];
     }
     for (let j = 0; j < seriesList.length; j += 1) {
-      const value = seriesList[j].y[i] / (sum * 100);
+      const value = seriesList[j].y[i] / sum * 100;
       seriesList[j].text.push(`Value: ${seriesList[j].y[i]}<br>Relative: ${value.toFixed(2)}%`);
       seriesList[j].y[i] = value;
     }
@@ -194,6 +198,9 @@ const PlotlyChart = () => {
     link(scope, element) {
       function calculateHeight() {
         const height = Math.max(scope.height, (scope.height - 50) + bottomMargin);
+        if (scope.options.globalSeriesType === 'box') {
+          return scope.options.height || height;
+        }
         return height;
       }
 
@@ -207,6 +214,11 @@ const PlotlyChart = () => {
           series.mode = 'lines';
         } else if (type === 'scatter') {
           series.type = 'scatter';
+          series.mode = 'markers';
+        } else if (type === 'bubble') {
+          series.mode = 'markers';
+        } else if (type === 'box') {
+          series.type = 'box';
           series.mode = 'markers';
         }
       }
@@ -268,6 +280,12 @@ const PlotlyChart = () => {
           return;
         }
 
+        if (scope.options.globalSeriesType === 'box') {
+          scope.options.sortX = false;
+          scope.layout.boxmode = 'group';
+          scope.layout.boxgroupgap = 0.50;
+        }
+
         let hasY2 = false;
         const sortX = scope.options.sortX === true || scope.options.sortX === undefined;
         const useUnifiedXaxis = sortX && scope.options.xAxis.type === 'category';
@@ -284,6 +302,7 @@ const PlotlyChart = () => {
           const plotlySeries = {
             x: [],
             y: [],
+            error_y: { array: [] },
             name: seriesOptions.name || series.name,
             marker: { color: seriesOptions.color ? seriesOptions.color : getColor(index) },
           };
@@ -301,18 +320,54 @@ const PlotlyChart = () => {
 
           if (useUnifiedXaxis && index === 0) {
             const yValues = {};
+            const eValues = {};
 
-            data.forEach((row) => { yValues[row.x] = row.y; });
+            data.forEach((row) => {
+              yValues[row.x] = row.y;
+              if (row.yError) {
+                eValues[row.x] = row.yError;
+              }
+            });
 
             unifiedX.forEach((x) => {
               plotlySeries.x.push(normalizeValue(x));
               plotlySeries.y.push(normalizeValue(yValues[x] || null));
+              if (!isUndefined(eValues[x])) {
+                plotlySeries.error_y.array.push(normalizeValue(eValues[x] || null));
+              }
             });
           } else {
             data.forEach((row) => {
               plotlySeries.x.push(normalizeValue(row.x));
               plotlySeries.y.push(normalizeValue(row.y));
+              if (row.yError) {
+                plotlySeries.error_y.array.push(normalizeValue(row.yError));
+              }
             });
+          }
+          if (!plotlySeries.error_y.length) {
+            delete plotlySeries.error_y.length;
+          }
+
+          if (seriesOptions.type === 'bubble') {
+            plotlySeries.marker = {
+              size: pluck(data, 'size'),
+            };
+          }
+
+          if (seriesOptions.type === 'box') {
+            plotlySeries.boxpoints = 'outliers';
+            plotlySeries.marker = {
+              size: 3,
+            };
+            if (scope.options.showpoints) {
+              plotlySeries.boxpoints = 'all';
+              plotlySeries.jitter = 0.3;
+              plotlySeries.pointpos = -1.8;
+              plotlySeries.marker = {
+                size: 3,
+              };
+            }
           }
 
           scope.data.push(plotlySeries);
@@ -385,7 +440,11 @@ const PlotlyChart = () => {
       scope.$watch('series', recalculateOptions);
       scope.$watch('options', recalculateOptions, true);
 
-      scope.layout = { margin: { l: 50, r: 50, b: bottomMargin, t: 20, pad: 4 }, height: calculateHeight(), autosize: true, hovermode: 'closest' };
+      scope.layout = {
+        margin: { l: 50, r: 50, b: bottomMargin, t: 20, pad: 4 },
+        height: calculateHeight(),
+        autosize: true,
+      };
       scope.plotlyOptions = { showLink: false, displaylogo: false };
       scope.data = [];
 

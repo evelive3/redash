@@ -1,12 +1,15 @@
 import _ from 'underscore';
-import template from './dashboard-list.html';
 
-function DashboardListCtrl($scope, Dashboard, $location, currentUser, clientConfig, NgTableParams) {
-  const self = this;
+import { Paginator } from '../../utils';
+import template from './dashboard-list.html';
+import './dashboard-list.css';
+
+
+function DashboardListCtrl(Dashboard, $location, clientConfig) {
+  const TAGS_REGEX = /(^([\w\s]|[^\u0000-\u007F])+):|(#([\w-]|[^\u0000-\u007F])+)/ig;
 
   this.logoUrl = clientConfig.logoUrl;
   const page = parseInt($location.search().page || 1, 10);
-  const count = 25;
 
   this.defaultOptions = {};
   this.dashboards = Dashboard.query({}); // shared promise
@@ -16,51 +19,59 @@ function DashboardListCtrl($scope, Dashboard, $location, currentUser, clientConf
 
   this.tagIsSelected = tag => this.selectedTags.indexOf(tag) > -1;
 
-  this.toggleTag = (tag) => {
+  this.toggleTag = ($event, tag) => {
     if (this.tagIsSelected(tag)) {
-      this.selectedTags = this.selectedTags.filter(e => e !== tag);
-    } else {
+      if ($event.shiftKey) {
+        this.selectedTags = this.selectedTags.filter(e => e !== tag);
+      } else {
+        this.selectedTags = [];
+      }
+    } else if ($event.shiftKey) {
       this.selectedTags.push(tag);
+    } else {
+      this.selectedTags = [tag];
     }
-    this.tableParams.reload();
+
+    this.update();
   };
 
   this.allTags = [];
   this.dashboards.$promise.then((data) => {
-    const out = data.map(dashboard => dashboard.name.match(/(^\w+):|(#\w+)/ig));
-    this.allTags = _.unique(_.flatten(out)).filter(e => e);
+    const out = data.map(dashboard => dashboard.name.match(TAGS_REGEX));
+    this.allTags = _.unique(_.flatten(out)).filter(e => e).map(tag => tag.replace(/:$/, ''));
+    this.allTags.sort();
   });
 
-  this.tableParams = new NgTableParams({ page, count }, {
-    getData(params) {
-      const options = params.url();
-      $location.search('page', options.page);
+  this.paginator = new Paginator([], { page });
 
-      return self.dashboards.$promise.then((data) => {
-        params.total(data.count);
-        return data.map((dashboard) => {
-          dashboard.tags = dashboard.name.match(/(^\w+):|(#\w+)/ig);
-          dashboard.untagged_name = dashboard.name.replace(/(\w+):|(#\w+)/ig, '').trim();
-          return dashboard;
-        }).filter((value) => {
-          if (self.selectedTags.length) {
-            const valueTags = new Set(value.tags);
-            const tagMatch = self.selectedTags;
-            const filteredMatch = tagMatch.filter(x => valueTags.has(x));
-            if (tagMatch.length !== filteredMatch.length) {
-              return false;
-            }
+  this.update = () => {
+    this.dashboards.$promise.then((data) => {
+      const filteredDashboards = data.map((dashboard) => {
+        dashboard.tags = (dashboard.name.match(TAGS_REGEX) || []).map(tag => tag.replace(/:$/, ''));
+        dashboard.untagged_name = dashboard.name.replace(TAGS_REGEX, '').trim();
+        return dashboard;
+      }).filter((value) => {
+        if (this.selectedTags.length) {
+          const valueTags = new Set(value.tags);
+          const tagMatch = this.selectedTags;
+          const filteredMatch = tagMatch.filter(x => valueTags.has(x));
+          if (tagMatch.length !== filteredMatch.length) {
+            return false;
           }
-          if (self.searchText && self.searchText.length) {
-            if (!value.untagged_name.toLowerCase().includes(self.searchText)) {
-              return false;
-            }
+        }
+        if (this.searchText && this.searchText.length) {
+          if (!value.untagged_name.toLowerCase().includes(this.searchText.toLowerCase())) {
+            return false;
           }
-          return true;
-        });
+        }
+        return true;
       });
-    },
-  });
+
+      this.paginator.updateRows(filteredDashboards, data.count);
+    });
+  };
+
+  this.update();
 }
 
 export default function (ngModule) {
@@ -72,6 +83,7 @@ export default function (ngModule) {
   const route = {
     template: '<page-dashboard-list></page-dashboard-list>',
     reloadOnSearch: false,
+    title: 'Dashboards',
   };
 
   return {

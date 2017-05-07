@@ -27,18 +27,20 @@ function AlertCtrl($routeParams, $location, $sce, toastr, currentUser, Query, Ev
   } else {
     this.alert = Alert.get({ id: this.alertId }, (alert) => {
       this.onQuerySelected(new Query(alert.query));
+      this.canEdit = currentUser.canEdit(this.alert);
     });
-    this.canEdit = currentUser.canEdit(this.alert);
   }
 
   this.ops = ['greater than', 'less than', 'equals'];
   this.selectedQuery = null;
 
+  const defaultNameBuilder = templateBuilder('<%= query.name %>: <%= options.column %> <%= options.op %> <%= options.value %>');
+
   this.getDefaultName = () => {
     if (!this.alert.query) {
       return undefined;
     }
-    return templateBuilder('<%= query.name %>: <%= options.column %> <%= options.op %> <%= options.value %>', this.alert);
+    return defaultNameBuilder(this.alert);
   };
 
   this.searchQueries = (term) => {

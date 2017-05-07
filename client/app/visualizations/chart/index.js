@@ -1,4 +1,4 @@
-import { has, partial, intersection, without, contains, isUndefined, sortBy, each, pluck, keys, difference } from 'underscore';
+import { some, extend, has, partial, intersection, without, contains, isUndefined, sortBy, each, pluck, keys, difference } from 'underscore';
 import plotly from './plotly';
 import template from './chart.html';
 import editorTemplate from './chart-editor.html';
@@ -23,7 +23,7 @@ function ChartRenderer() {
       }
 
       function reloadData() {
-        if (!isUndefined($scope.queryResult)) {
+        if (!isUndefined($scope.queryResult) && $scope.queryResult.getData()) {
           const data = $scope.queryResult.getChartData($scope.options.columnMapping);
           $scope.chartSeries = sortBy(data, zIndexCompare);
         }
@@ -40,7 +40,7 @@ function ChartRenderer() {
   };
 }
 
-function ChartEditor(clientConfig) {
+function ChartEditor(ColorPalette, clientConfig) {
   return {
     restrict: 'E',
     template: editorTemplate,
@@ -50,11 +50,16 @@ function ChartEditor(clientConfig) {
     },
     link(scope) {
       scope.currentTab = 'general';
+      scope.colors = extend({ Automatic: null }, ColorPalette);
 
       scope.stackingOptions = {
         Disabled: null,
         Enabled: 'normal',
         Percent: 'percent',
+      };
+
+      scope.changeTab = (tab) => {
+        scope.currentTab = tab;
       };
 
       scope.chartTypes = {
@@ -63,6 +68,8 @@ function ChartEditor(clientConfig) {
         area: { name: 'Area', icon: 'area-chart' },
         pie: { name: 'Pie', icon: 'pie-chart' },
         scatter: { name: 'Scatter', icon: 'circle-o' },
+        bubble: { name: 'Bubble', icon: 'circle-o' },
+        box: { name: 'Box', icon: 'square-o' },
       };
 
       if (clientConfig.allowCustomJSVisualizations) {
@@ -73,10 +80,12 @@ function ChartEditor(clientConfig) {
       scope.yAxisScales = ['linear', 'logarithmic', 'datetime'];
 
       scope.chartTypeChanged = () => {
-        scope.options.seriesOptions.forEach((options) => {
-          options.type = scope.options.globalSeriesType;
+        keys(scope.options.seriesOptions).forEach((key) => {
+          scope.options.seriesOptions[key].type = scope.options.globalSeriesType;
         });
       };
+
+      scope.showSizeColumnPicker = () => some(scope.options.seriesOptions, options => options.type === 'bubble');
 
       scope.options.customCode = `// Available variables are x, ys, element, and Plotly
 // Type console.log(x, ys); for more info about x and ys
@@ -177,6 +186,25 @@ function ChartEditor(clientConfig) {
         if (value !== undefined) { setColumnRole('x', value); }
       });
 
+      scope.$watch('form.errorColumn', (value, old) => {
+        if (old !== undefined) {
+          unsetColumn(old);
+        }
+        if (value !== undefined) {
+          setColumnRole('yError', value);
+        }
+      });
+
+      scope.$watch('form.sizeColumn', (value, old) => {
+        if (old !== undefined) {
+          unsetColumn(old);
+        }
+        if (value !== undefined) {
+          setColumnRole('size', value);
+        }
+      });
+
+
       scope.$watch('form.groupby', (value, old) => {
         if (old !== undefined) {
           unsetColumn(old);
@@ -205,6 +233,10 @@ function ChartEditor(clientConfig) {
             scope.form.yAxisColumns.push(key);
           } else if (value === 'series') {
             scope.form.groupby = key;
+          } else if (value === 'yError') {
+            scope.form.errorColumn = key;
+          } else if (value === 'size') {
+            scope.form.sizeColumn = key;
           }
         });
       }
@@ -233,7 +265,8 @@ export default function (ngModule) {
       legend: { enabled: true },
       yAxis: [{ type: 'linear' }, { type: 'linear', opposite: true }],
       xAxis: { type: 'datetime', labels: { enabled: true } },
-      series: { stacking: null },
+      error_y: { type: 'data', visible: true },
+      series: { stacking: null, error_y: { type: 'data', visible: true } },
       seriesOptions: {},
       columnMapping: {},
       bottomMargin: 50,

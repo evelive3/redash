@@ -1,3 +1,6 @@
+// This polyfill is needed to support PhantomJS which we use to generate PNGs from embeds.
+import 'core-js/fn/typed/array-buffer';
+
 import 'material-design-iconic-font/dist/css/material-design-iconic-font.css';
 import 'font-awesome/css/font-awesome.css';
 import 'ui-select/dist/select.css';
@@ -23,13 +26,13 @@ import 'brace';
 import 'angular-ui-ace';
 import 'angular-resizable';
 import ngGridster from 'angular-gridster';
-import { ngTable } from 'ng-table';
 import { each } from 'underscore';
 
 import './sortable';
 
 import './assets/css/superflat_redash.css';
 import './assets/css/redash.css';
+import './assets/css/main.scss';
 
 import * as pages from './pages';
 import * as components from './components';
@@ -43,7 +46,7 @@ import dateTimeFilter from './filters/datetime';
 const logger = debug('redash');
 
 const requirements = [
-  ngRoute, ngResource, ngSanitize, uiBootstrap, ngMessages, uiSelect, ngTable.name, 'angularMoment', toastr, 'ui.ace',
+  ngRoute, ngResource, ngSanitize, uiBootstrap, ngMessages, uiSelect, 'angularMoment', toastr, 'ui.ace',
   ngUpload, 'angularResizable', vsRepeat, 'ui.sortable', ngGridster.name,
 ];
 
@@ -105,6 +108,14 @@ ngModule.config(($routeProvider, $locationProvider, $compileProvider,
     positionClass: 'toast-bottom-right',
     timeOut: 2000,
   });
+});
+
+// Update ui-select's template to use Font-Awesome instead of glyphicon.
+ngModule.run(($templateCache, OfflineListener) => { // eslint-disable-line no-unused-vars
+  const templateName = 'bootstrap/match.tpl.html';
+  let template = $templateCache.get(templateName);
+  template = template.replace('glyphicon glyphicon-remove', 'fa fa-remove');
+  $templateCache.put(templateName, template);
 });
 
 export default ngModule;
